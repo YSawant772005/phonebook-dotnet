@@ -14,3 +14,11 @@ coverage/
 # OS / editor / logs
 .DS_Store
 *.log
+# .NET build output
+**/bin/
+**/obj/
+
+# Visual Studio / .NET local files
+.vs/
+*.user
+*.suo
