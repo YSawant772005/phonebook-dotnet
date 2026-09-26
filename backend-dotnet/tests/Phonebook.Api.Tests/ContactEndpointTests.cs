@@ -6,14 +6,14 @@ using Phonebook.Api.Models;
 
 namespace Phonebook.Api.Tests;
 
-public sealed class ContactsControllerTests : IClassFixture<PhonebookApiFactory>
+public sealed class ContactEndpointTests : IClassFixture<PhonebookApiFactory>
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly PhonebookApiFactory _factory;
     private readonly HttpClient _client;
 
-    public ContactsControllerTests(PhonebookApiFactory factory)
+    public ContactEndpointTests(PhonebookApiFactory factory)
     {
         _factory = factory;
         _factory.Repository.Reset();
@@ -59,6 +59,7 @@ public sealed class ContactsControllerTests : IClassFixture<PhonebookApiFactory>
         Assert.Equal("jane.doe.new@example.com", root.GetProperty("email").GetString());
         Assert.Equal("Some address", root.GetProperty("address").GetString());
         Assert.True(root.GetProperty("id").GetInt32() > 0);
+        Assert.Equal($"/contacts/{root.GetProperty("id").GetInt32()}", response.Headers.Location?.OriginalString);
         string createdAt = root.GetProperty("created_at").GetString()!;
         Assert.EndsWith("Z", createdAt);
         Assert.True(DateTime.TryParse(createdAt, out _), $"created_at not parseable: {createdAt}");
@@ -263,6 +264,24 @@ public sealed class ContactsControllerTests : IClassFixture<PhonebookApiFactory>
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("must be greater than 0", ReadDetail(await response.Content.ReadAsStringAsync()));
+    }
+
+    [Fact]
+    public async Task RejectsMalformedId()
+    {
+        HttpResponseMessage response = await _client.GetAsync("/contacts/not-an-id");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("The value 'not-an-id' is not valid.", ReadDetail(await response.Content.ReadAsStringAsync()));
+    }
+
+    [Fact]
+    public async Task RejectsMalformedPage()
+    {
+        HttpResponseMessage response = await _client.GetAsync("/contacts?page=not-a-number");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("The value 'not-a-number' is not valid.", ReadDetail(await response.Content.ReadAsStringAsync()));
     }
 
     [Fact]
@@ -488,6 +507,23 @@ public sealed class ContactsControllerTests : IClassFixture<PhonebookApiFactory>
         string[] names = root.EnumerateObject().Select(p => p.Name).ToArray();
         Assert.Equal(new[] { "detail" }, names);
         Assert.Equal("Contact not found.", root.GetProperty("detail").GetString());
+    }
+
+    [Fact]
+    public async Task ConvertsUnexpectedErrorsToDetailResponse()
+    {
+        _factory.Repository.GetPageException = new InvalidOperationException("test failure");
+        try
+        {
+            HttpResponseMessage response = await _client.GetAsync("/contacts");
+
+            Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+            Assert.Equal("An unexpected server error occurred.", ReadDetail(await response.Content.ReadAsStringAsync()));
+        }
+        finally
+        {
+            _factory.Repository.GetPageException = null;
+        }
     }
 
     [Fact]

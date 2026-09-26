@@ -1,9 +1,9 @@
 using System.Text.Json;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Phonebook.Api.Data;
+using Phonebook.Api.Endpoints;
 using Phonebook.Api.Middleware;
 using Phonebook.Api.Services;
 
@@ -38,15 +38,14 @@ if (Environment.GetEnvironmentVariable("PORT") is { Length: > 0 } port)
     builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 }
 
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-    });
-
-builder.Services.Configure<ApiBehaviorOptions>(options =>
+builder.Services.ConfigureHttpJsonOptions(options =>
 {
-    options.InvalidModelStateResponseFactory = ErrorResponseFactory.Create;
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+});
+
+builder.Services.Configure<RouteHandlerOptions>(options =>
+{
+    options.ThrowOnBadRequest = true;
 });
 
 string connectionString = BuildConnectionString(builder.Configuration);
@@ -60,36 +59,10 @@ var app = builder.Build();
 
 app.UseMiddleware<ErrorHandlingMiddleware>();
 
-app.MapControllers();
+app.MapContactEndpoints();
 
 app.Run();
 
 public partial class Program
 {
-}
-
-internal static class ErrorResponseFactory
-{
-    public static IActionResult Create(ActionContext context)
-    {
-        // Body-level failures (malformed JSON, empty body, JSON type mismatches) are
-        // registered under the "$", "" or parameter-name keys. The Java reference
-        // backend maps every HttpMessageNotReadableException to the same message.
-        bool hasBodyError = context.ModelState.Any(state =>
-            (state.Key == "$" || state.Key == "" || state.Key == "request")
-            && state.Value is { Errors.Count: > 0 });
-
-        if (hasBodyError)
-        {
-            return new BadRequestObjectResult(new { detail = "Request body must contain valid JSON." });
-        }
-
-        ModelError? firstError = context.ModelState
-            .Where(state => state.Value is { Errors.Count: > 0 })
-            .SelectMany(state => state.Value!.Errors)
-            .FirstOrDefault();
-
-        string message = firstError?.ErrorMessage ?? "Invalid request.";
-        return new BadRequestObjectResult(new { detail = message });
-    }
 }

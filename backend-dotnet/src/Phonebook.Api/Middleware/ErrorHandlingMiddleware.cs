@@ -38,6 +38,10 @@ public sealed class ErrorHandlingMiddleware
         {
             await WriteErrorAsync(context, StatusCodes.Status400BadRequest, exception.Message);
         }
+        catch (BadHttpRequestException exception)
+        {
+            await WriteErrorAsync(context, StatusCodes.Status400BadRequest, GetBadRequestDetail(exception));
+        }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Unexpected API error");
@@ -54,6 +58,25 @@ public sealed class ErrorHandlingMiddleware
 
         string mediaType = context.Request.ContentType?.Split(';')[0].Trim() ?? string.Empty;
         return !mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetBadRequestDetail(BadHttpRequestException exception)
+    {
+        const string valueMarker = " from \"";
+        int markerIndex = exception.Message.IndexOf(valueMarker, StringComparison.Ordinal);
+        if (markerIndex < 0)
+        {
+            return "Invalid request.";
+        }
+
+        int valueStart = markerIndex + valueMarker.Length;
+        int valueEnd = exception.Message.IndexOf('"', valueStart);
+        if (valueEnd < 0)
+        {
+            return "Invalid request.";
+        }
+
+        return $"The value '{exception.Message[valueStart..valueEnd]}' is not valid.";
     }
 
     private static async Task WriteErrorAsync(HttpContext context, int statusCode, string detail)

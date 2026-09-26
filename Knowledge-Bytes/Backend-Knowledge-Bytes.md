@@ -1973,7 +1973,7 @@ the building (each `DbSet`) and how the building is configured.
 
 **Check yourself:**
 1. What does `DbSet<Contact>` represent?
-2. How does the context know to use PostgreSQL?
+2. How does the context know to use PostgreSQL?1
 3. Why is the context scoped per request?
 
 ---

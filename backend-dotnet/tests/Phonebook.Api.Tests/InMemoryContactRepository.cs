@@ -9,6 +9,8 @@ public sealed class InMemoryContactRepository : IContactRepository
     private readonly Dictionary<int, Contact> _contacts = new();
     private int _nextId = 1;
 
+    public Exception? GetPageException { get; set; }
+
     public void Reset()
     {
         lock (_gate)
@@ -56,6 +58,11 @@ public sealed class InMemoryContactRepository : IContactRepository
         string? search,
         CancellationToken cancellationToken)
     {
+        if (GetPageException is not null)
+        {
+            throw GetPageException;
+        }
+
         lock (_gate)
         {
             List<Contact> filtered = _contacts.Values.Where(c =>
